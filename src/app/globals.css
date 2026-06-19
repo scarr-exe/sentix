@@ -2,18 +2,104 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg: #050706;
+  --bg-panel: #0a0f0b;
+  --bg-panel-hover: #0d140f;
+  --fg: #d6ffe0;
+  --fg-dim: #6b8a76;
+  --fg-faint: #3d5246;
+  --accent: #2bff7f;
+  --accent-dim: #114d2c;
+  --danger: #ff4d4d;
+  --danger-dim: #4d1414;
+  --warn: #ffd166;
+  --border: #1c2b20;
+  --border-soft: #14201a;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+html {
+  background-color: var(--bg);
+}
+
 body {
-  background-color: #0a0a0a;
-  color: white;
+  background-color: var(--bg);
+  color: var(--fg);
+  position: relative;
+}
+
+::selection {
+  background: var(--accent-dim);
+  color: var(--accent);
 }
 
 select option {
-  background-color: #111;
-  color: white;
+  background-color: var(--bg-panel);
+  color: var(--fg);
+}
+
+/* CRT scanline overlay — fixed, full-viewport, decorative only */
+.crt-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.crt-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.025) 0px,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+.crt-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 55%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.cursor-blink {
+  animation: blink 1s steps(1, end) infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.dot-pulse {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.text-glow {
+  text-shadow: 0 0 10px rgba(43, 255, 127, 0.45);
 }

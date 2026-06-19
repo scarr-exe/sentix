@@ -10,9 +10,15 @@ const config: Config = {
     extend: {
       fontFamily: {
         mono: ["var(--font-mono)", "monospace"],
+        sans: ["var(--font-mono)", "monospace"],
       },
-      colors: {
-        accent: "#00f5a0",
+      borderRadius: {
+        DEFAULT: "0",
+        sm: "0",
+        md: "0",
+        lg: "0",
+        xl: "0",
+        full: "9999px",
       },
     },
   },

@@ -1,132 +1,309 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import type { StrategyRules } from "@/lib/strategy";
+import type { SimulationResult } from "@/lib/simulate";
+import type { Explanation } from "@/lib/explain";
+import { SummaryCards } from "@/components/SummaryCards";
+import { TradeLogTable } from "@/components/TradeLogTable";
+import { EquityCurveChart } from "@/components/EquityCurveChart";
+import { ExplanationCard } from "@/components/ExplanationCard";
 
 const ASSETS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "BNB/USDT"];
 const TIMEFRAMES = ["1H", "4H", "1D"];
 const PERIODS = ["30 days", "60 days", "90 days"];
+
+type SimulateResponse = {
+  rules: StrategyRules;
+  result: SimulationResult;
+};
+
+function StatusBar({ loading }: { loading: boolean }) {
+  return (
+    <div className="w-full border-b border-[var(--border)] px-4 py-1.5 flex items-center justify-between font-mono text-xs text-[var(--fg-dim)] mb-0">
+      <span className="flex items-center gap-2">
+        <span className="dot-pulse w-1.5 h-1.5 rounded-full bg-[var(--accent)] inline-block" />
+        SENTIX v1.0
+      </span>
+      <span className="flex items-center gap-3">
+        <span>{loading ? "RUNNING..." : "READY"}</span>
+        <span className="text-[var(--fg-faint)]">|</span>
+        <span className="text-[var(--fg-faint)]">BUILT BY  <a href="https://twitter.com/scarr-exe" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--accent)]">
+          @scarr-exe
+        </a></span>
+      </span>
+    </div>
+  );
+}
 
 export default function Home() {
   const [strategy, setStrategy] = useState("");
   const [asset, setAsset] = useState("BTC/USDT");
   const [timeframe, setTimeframe] = useState("1H");
   const [period, setPeriod] = useState("90 days");
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
-  const handleRun = async () => {
-    if (!strategy.trim()) return;
-    setLoading(true);
-    // Will wire up to API in Milestone 3
-    setTimeout(() => {
-      setLoading(false);
-      router.push("/results");
-    }, 1500);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<SimulateResponse | null>(null);
+
+  const [explanation, setExplanation] = useState<Explanation | null>(null);
+  const [explanationLoading, setExplanationLoading] = useState(false);
+  const [explanationError, setExplanationError] = useState<string | null>(null);
+
+  const [refineText, setRefineText] = useState("");
+
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (data && resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [data]);
+
+  const fetchExplanation = async (response: SimulateResponse) => {
+    setExplanationLoading(true);
+    setExplanationError(null);
+    setExplanation(null);
+
+    try {
+      const res = await fetch("/api/explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rules: response.rules,
+          summary: response.result.summary,
+          trades: response.result.trades,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to generate explanation");
+      setExplanation(json as Explanation);
+    } catch (err) {
+      setExplanationError(err instanceof Error ? err.message : "Unexpected error");
+    } finally {
+      setExplanationLoading(false);
+    }
   };
 
+  const runSimulation = async (text: string) => {
+    if (!text.trim() || loading) return;
+
+    setLoading(true);
+    setError(null);
+    setData(null);
+    setExplanation(null);
+    setExplanationError(null);
+
+    try {
+      const res = await fetch("/api/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ strategyText: text, symbol: asset, timeframe, period }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Simulation failed");
+
+      const response = json as SimulateResponse;
+      setStrategy(text);
+      setRefineText(text);
+      setData(response);
+      fetchExplanation(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRun = () => runSimulation(strategy);
+  const handleRefine = () => runSimulation(refineText);
+
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-white flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-2xl">
+    <>
+      {/* CRT scanline + vignette overlay */}
+      <div className="crt-overlay" aria-hidden="true" />
 
-        {/* Logo */}
-        <div className="mb-12">
-          <h1 className="font-mono text-2xl font-bold tracking-tight text-white">
-            Strat<span className="text-[#00f5a0]">Sim</span>
-          </h1>
-          <p className="text-[#666] text-sm mt-1 font-mono">
-            AI-powered strategy backtester
-          </p>
-        </div>
+      <div className="min-h-screen flex flex-col font-mono">
+        {/* Top status bar */}
+        <StatusBar loading={loading} />
 
-        {/* Headline */}
-        <div className="mb-10">
-          <h2 className="text-4xl font-bold leading-tight tracking-tight text-white">
-            Test your strategy.<br />
-            <span className="text-[#00f5a0]">Before it costs you.</span>
-          </h2>
-          <p className="text-[#888] mt-3 text-base leading-relaxed">
-            Describe a trading strategy in plain English. We run it against real
-            market history and tell you exactly what would have happened.
-          </p>
-        </div>
+        <main className="flex flex-col items-center px-4 py-10 flex-1">
+          <div className="w-full max-w-2xl space-y-8">
 
-        {/* Strategy Input */}
-        <div className="mb-4">
-          <label className="block text-xs font-mono text-[#555] uppercase tracking-widest mb-2">
-            Your strategy
-          </label>
-          <textarea
-            value={strategy}
-            onChange={(e) => setStrategy(e.target.value)}
-            placeholder={`e.g. "Buy BTC when price drops 3% in the last hour. Sell when it recovers 2% from entry. Stop loss at 5% below entry."`}
-            rows={4}
-            className="w-full bg-[#111] border border-[#222] rounded-lg p-4 text-white placeholder-[#444] font-mono text-sm resize-none focus:outline-none focus:border-[#00f5a0] transition-colors"
-          />
-        </div>
+            {/* Header */}
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-[var(--accent)] text-glow">
+                SEN<span className="text-[var(--fg)]">TIX</span>
+                <span className="cursor-blink text-[var(--accent)] ml-1">_</span>
+              </h1>
+              <p className="text-[var(--fg-dim)] text-xs mt-1 uppercase tracking-widest">
+                trading strategy backtester
+              </p>
+            </div>
 
-        {/* Config Row */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div>
-            <label className="block text-xs font-mono text-[#555] uppercase tracking-widest mb-2">
-              Asset
-            </label>
-            <select
-              value={asset}
-              onChange={(e) => setAsset(e.target.value)}
-              className="w-full bg-[#111] border border-[#222] rounded-lg px-3 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-[#00f5a0] transition-colors appearance-none cursor-pointer"
-            >
-              {ASSETS.map((a) => (
-                <option key={a} value={a}>{a}</option>
-              ))}
-            </select>
+            {/* Input panel */}
+            <div className="border border-[var(--border)] bg-[var(--bg-panel)]">
+              <div className="border-b border-[var(--border)] px-4 py-2 text-[var(--fg-faint)] text-xs uppercase tracking-widest flex items-center justify-between">
+                <span>[ INPUT ]</span>
+                <span className="text-[var(--fg-faint)]">{asset} · {timeframe} · {period}</span>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Strategy textarea */}
+                <div>
+                  <label className="block text-xs text-[var(--fg-faint)] uppercase tracking-widest mb-1.5">
+                    &gt; Strategy
+                  </label>
+                  <textarea
+                    value={strategy}
+                    onChange={(e) => setStrategy(e.target.value)}
+                    placeholder={`"Buy BTC when price drops 3% in the last hour. Sell when it recovers 2% from entry. Stop loss at 5% below entry."`}
+                    rows={4}
+                    className="w-full bg-[var(--bg)] border border-[var(--border)] p-3 text-[var(--fg)] placeholder-[var(--fg-faint)] text-sm resize-none focus:outline-none focus:border-[var(--accent)] transition-colors"
+                  />
+                </div>
+
+                {/* Config row */}
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Asset", value: asset, setter: setAsset, options: ASSETS },
+                    { label: "Timeframe", value: timeframe, setter: setTimeframe, options: TIMEFRAMES },
+                    { label: "Period", value: period, setter: setPeriod, options: PERIODS },
+                  ].map(({ label, value, setter, options }) => (
+                    <div key={label}>
+                      <label className="block text-xs text-[var(--fg-faint)] uppercase tracking-widest mb-1.5">
+                        &gt; {label}
+                      </label>
+                      <select
+                        value={value}
+                        onChange={(e) => setter(e.target.value)}
+                        className="w-full bg-[var(--bg)] border border-[var(--border)] px-2 py-2 text-[var(--fg)] text-sm focus:outline-none focus:border-[var(--accent)] transition-colors appearance-none cursor-pointer"
+                      >
+                        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Run button */}
+                <button
+                  onClick={handleRun}
+                  disabled={!strategy.trim() || loading}
+                  className="w-full border border-[var(--accent)] text-[var(--accent)] py-3 text-sm uppercase tracking-widest hover:bg-[var(--accent)] hover:text-black transition-colors disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[var(--accent)] font-bold"
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="w-3 h-3 border-2 border-[var(--accent-dim)] border-t-[var(--accent)] rounded-full animate-spin" />
+                      RUNNING SIMULATION...
+                    </span>
+                  ) : (
+                    "[ RUN SIMULATION ]"
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="border border-[var(--danger)] bg-[var(--danger-dim)] p-4 text-[var(--danger)] text-sm">
+                ERR: {error}
+              </div>
+            )}
+
+            {/* Results */}
+            {data && (
+              <div ref={resultsRef} className="space-y-6 animate-fade-in">
+
+                {/* Summary */}
+                <div className="border border-[var(--border)] bg-[var(--bg-panel)]">
+                  <div className="border-b border-[var(--border)] px-4 py-2 text-[var(--fg-faint)] text-xs uppercase tracking-widest">
+                    [ SUMMARY ]
+                  </div>
+                  <div className="p-4">
+                    <SummaryCards summary={data.result.summary} />
+                  </div>
+                </div>
+
+                {/* Equity curve */}
+                <div className="border border-[var(--border)] bg-[var(--bg-panel)]">
+                  <div className="border-b border-[var(--border)] px-4 py-2 text-[var(--fg-faint)] text-xs uppercase tracking-widest">
+                    [ EQUITY CURVE ]
+                  </div>
+                  <div className="p-4">
+                    <EquityCurveChart data={data.result.equityCurve} />
+                  </div>
+                </div>
+
+                {/* Trade log */}
+                <div className="border border-[var(--border)] bg-[var(--bg-panel)]">
+                  <div className="border-b border-[var(--border)] px-4 py-2 text-[var(--fg-faint)] text-xs uppercase tracking-widest flex items-center justify-between">
+                    <span>[ TRADE LOG ]</span>
+                    <span>{data.result.trades.length} TRADES</span>
+                  </div>
+                  <TradeLogTable trades={data.result.trades} />
+                </div>
+
+                {/* Analysis */}
+                <div className="border border-[var(--border)] bg-[var(--bg-panel)]">
+                  <div className="border-b border-[var(--border)] px-4 py-2 text-[var(--fg-faint)] text-xs uppercase tracking-widest">
+                    [ ANALYSIS ]
+                  </div>
+                  <div className="p-4">
+                    <ExplanationCard
+                      analysis={explanation?.analysis ?? null}
+                      suggestion={explanation?.suggestion ?? null}
+                      loading={explanationLoading}
+                      error={explanationError}
+                    />
+                  </div>
+                </div>
+
+                {/* Refine */}
+                <div className="border border-[var(--border)] bg-[var(--bg-panel)]">
+                  <div className="border-b border-[var(--border)] px-4 py-2 text-[var(--fg-faint)] text-xs uppercase tracking-widest">
+                    [ REFINE ]
+                  </div>
+                  <div className="p-4 space-y-3">
+                    <label className="block text-xs text-[var(--fg-faint)] uppercase tracking-widest mb-1.5">
+                      &gt; Updated strategy
+                    </label>
+                    <textarea
+                      value={refineText}
+                      onChange={(e) => setRefineText(e.target.value)}
+                      rows={3}
+                      className="w-full bg-[var(--bg)] border border-[var(--border)] p-3 text-[var(--fg)] text-sm resize-none focus:outline-none focus:border-[var(--accent)] transition-colors"
+                    />
+                    <button
+                      onClick={handleRefine}
+                      disabled={!refineText.trim() || loading}
+                      className="w-full border border-[var(--fg-dim)] text-[var(--fg-dim)] py-3 text-sm uppercase tracking-widest hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors disabled:opacity-25 disabled:cursor-not-allowed font-bold"
+                    >
+                      {loading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="w-3 h-3 border-2 border-[var(--accent-dim)] border-t-[var(--accent)] rounded-full animate-spin" />
+                          RUNNING...
+                        </span>
+                      ) : (
+                        "[ RUN AGAIN ]"
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="border-t border-[var(--border)] pt-4 flex items-center justify-between text-[var(--fg-faint)] text-xs">
+              <span>SENTIX</span>
+              <span>DISCLAIMER: NO REAL TRADES PERFORMED</span>
+            </div>
+
           </div>
-
-          <div>
-            <label className="block text-xs font-mono text-[#555] uppercase tracking-widest mb-2">
-              Timeframe
-            </label>
-            <select
-              value={timeframe}
-              onChange={(e) => setTimeframe(e.target.value)}
-              className="w-full bg-[#111] border border-[#222] rounded-lg px-3 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-[#00f5a0] transition-colors appearance-none cursor-pointer"
-            >
-              {TIMEFRAMES.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono text-[#555] uppercase tracking-widest mb-2">
-              Period
-            </label>
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="w-full bg-[#111] border border-[#222] rounded-lg px-3 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-[#00f5a0] transition-colors appearance-none cursor-pointer"
-            >
-              {PERIODS.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Run Button */}
-        <button
-          onClick={handleRun}
-          disabled={!strategy.trim() || loading}
-          className="w-full bg-[#00f5a0] text-black font-mono font-bold py-4 rounded-lg text-sm uppercase tracking-widest hover:bg-[#00e090] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          {loading ? "Parsing strategy..." : "Run Simulation →"}
-        </button>
-
-        {/* Footer note */}
-        <p className="text-center text-[#444] text-xs font-mono mt-6">
-          Simulated only · No real trades executed
-        </p>
+        </main>
       </div>
-    </main>
+    </>
   );
 }
