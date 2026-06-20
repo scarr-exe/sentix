@@ -28,7 +28,7 @@ function StatusBar({ loading }: { loading: boolean }) {
       <span className="flex items-center gap-3">
         <span>{loading ? "RUNNING..." : "READY"}</span>
         <span className="text-[var(--fg-faint)]">|</span>
-        <span className="text-[var(--fg-faint)]">BUILT BY  <a href="https://twitter.com/scarr-exe" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--accent)]">
+        <span className="text-[var(--fg-faint)]">BUILT BY  <a href="https://twitter.com/scarr_exe" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--accent)]">
           @scarr-exe
         </a></span>
       </span>
