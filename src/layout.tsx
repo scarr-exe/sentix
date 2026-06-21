@@ -8,7 +8,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "StratSim — Test Before You Trade",
+  title: "Sentix — Test Before You Trade",
   description: "Describe a trading strategy in plain English. Test it against real market data. Let AI explain what went wrong.",
 };
 
